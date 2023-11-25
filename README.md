@@ -36,5 +36,6 @@ release of the module.
 
 
 ## License
-The code in this repository is licensed under GPL-3 (assuming that most or
-all CRAN packages are using this license).
+The code in this repository is licensed under GPL-3. Assuming that most or
+all CRAN packages are using this license, the data sets should be covered
+by the same license.
