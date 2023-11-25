@@ -27,7 +27,7 @@ If you own data that are included here and you object to their inclusion,
 please follow the instructions at the end of the README file of Vincent's
 repository (https://github.com/vincentarelbundock/Rdatasets) for having
 them removed. You may write me an e-mail in addition so that I can trigger
-an update of this module where the data in question aren't included.
+an update of the jamovi module where the data in question aren't included.
 
 This repository doesn't store the R packages containing the data sets
 to be included in the final jamovi module. Instead, these packages are
