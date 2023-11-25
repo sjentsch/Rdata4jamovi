@@ -1,7 +1,8 @@
 # Rdata4jamovi
 Collection of R data sets as jamovi data files (.omv; incl. a data set
-description in each file). The collection is based upon a similar repository
-by Vincent Arel-Bundock (https://github.com/vincentarelbundock/Rdatasets).
+description in each file). The collection of data sets is based upon a
+similar repository by Vincent Arel-Bundock
+(https://github.com/vincentarelbundock/Rdatasets).
 
 
 ## What is this?
