@@ -1,0 +1,16 @@
+Package: Rdata4jamovi
+Type: Package
+Title: R Datasets for `jamovi`
+Version: 0.1.0
+Author: >
+  - The R Core Team
+  - The authors of the R packages that contained the data sets (see information in each data set)
+Maintainer: Sebastian Jentschke <sebastian.jentschke@uib.no>
+Description: >
+    This module provides data sets to be used with `jamovi` (e.g. in teaching). It assembles
+    data sets that are supplied together with different R-packages, and is based upon the
+    [Rdatasets](https://vincentarelbundock.github.io/Rdatasets/) by Vincent Arel-Bundock.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+NeedsCompilation: no

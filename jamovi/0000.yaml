@@ -1,0 +1,46 @@
+---
+title: R-Data-Sets for jamovi
+name: Rdata4jamovi
+version: 0.1.0
+jms: '1.0'
+authors:
+  - The R Core Team
+  - The authors of the R packages that contained the data sets (see information in each data set)
+maintainer:
+  - Sebastian Jentschke <sebastian.jentschke@uib.no>
+date: '2023-12-25'
+description: >-
+    This module provides data sets to be used with `jamovi` (e.g. in teaching). It assembles
+    data sets that are supplied together with different R-packages, and is based upon the
+    [Rdatasets](https://vincentarelbundock.github.io/Rdatasets/) by Vincent Arel-Bundock.
+analyses: []
+datasets:
+  - name: Example Data
+    path: Example Data.omv
+    description: Example description
+    tags:
+      - ANCOVA
+      - ANOVA
+      - Bar graphs
+      - Correlation
+      - Descriptives
+      - Factor analysis
+      - Frequencies
+      - Graphs
+      - Linear Regression
+      - Logistic Regression
+      - Mann-Whitney
+      - MANOVA
+      - Multilevel Linear Models
+      - Non-parametric methods
+      - R-code
+      - rmANOVA
+      - t-Test (Indep.)
+      - t-Test (Paired)
+      - UNIANOVA
+      - χ² Goodness of fit
+      - χ² Test of association
+usesNative: true
+minApp: 1.0.8
+
+...
