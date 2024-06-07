@@ -2,8 +2,13 @@
 
 # =================================================================================================
 
+addAtt <- function(dtaFrm = NULL, attNme = "", attVal = NULL) {
+    attr(dtaFrm, attNme) <- attVal
+    dtaFrm
+}
+
 clnRd  <- function(pkgRd = NULL) {
-    pkgRd <- pkgRd[sapply(pkgRd, tools:::.Rd_get_metadata, "keyword") == "datasets"]
+    pkgRd <- pkgRd[grepl("^dataset", sapply(pkgRd, tools:::.Rd_get_metadata, "keyword"))]
     pkgRd <- pkgRd[sapply(sapply(pkgRd, tools:::.Rd_get_metadata, "format"), length) == 1]
     pkgRd
 }
@@ -110,6 +115,12 @@ return(crrExm)
     crrMth
 }
 
+fmtLic <- function(pkgNme = "", pkgURL = "", pkgDsc = c()) {
+    sprintf(paste("This data set is included in the R-package %s (%s). It was originally published in the references shown above. The R-package (including",
+                  "this data set) uses the following license(s): %s."), pkgNme, ifelse(pkgURL == "", "part of base R", paste("available at", pkgURL)),
+                  gsub("\\|", "or", gsub("^License: ", "", pkgDsc[grepl("^License:", pkgDsc)])))
+}
+
 fmtRef <- function(inpStr = "") {
     if (length(inpStr) < 1 || !nzchar(inpStr)) return(character(0))
 
@@ -151,113 +162,238 @@ fmtVar <- function(inpStr = "") {
     lstVar
 }
 
-getDta <- function(pkgDir = "", dtaNme = "") {
-    # check whether the file is in data
-    fleNme <- list.files(file.path(pkgDir, "data"), dtaNme)
-    if (length(fleNme) == 1) {
-        fleExt <- tools::file_ext(fleNme[1])
-        if        (fleExt %in% c("rda", "Rdata", "RData")) {
-            dtaFrm <- getRda(file.path(pkgDir, "data", fleNme))
-        } else if (fleExt %in% c("csv")) {
-            stop(sprintf("Write CSV-reading-routine: %s.", fleNme))
-        } else if (fleExt %in% c("tab")) {
-            dtaFrm <- read.table(file.path(pkgDir, "data", fleNme))
-        } else if (fleExt %in% c("R")) {
-            dtaFrm <- getR(file.path(pkgDir, "data", fleNme))
+getDta <- function(pkgLoc = "", dtaNme = "") {
+    print(unname(dtaNme))
+    tmpEnv <- new.env()
+    if        (file.exists(pkgLoc) && file.info(pkgLoc)[["isdir"]]) {
+        crrDir <- getwd()
+        setwd(pkgLoc)
+        data(list = dtaNme, envir = tmpEnv)
+        setwd(crrDir)
+    } else if (pkgLoc %in% .packages(all.available = TRUE)) {
+        data(list = dtaNme, package = pkgLoc, envir = tmpEnv)
+    } else {
+        warning(sprintf("Data set %s (package: %s) was not found!", dtaNme, basename(pkgLoc)))
+        return(invisible(NULL))
+    }
+    if (dtaNme %in% ls(envir = tmpEnv)) {
+        dtaFrm <- get(dtaNme, envir = tmpEnv)
+    } else {
+        warning(sprintf("Data set %s (package: %s) was not found!", dtaNme, basename(pkgLoc)))
+        return(invisible(NULL))
+    }
+   
+    # array, data.frame, matrix, tbl_df
+    if        (any(class(dtaFrm) %in% c("array", "data.frame", "matrix", "tbl_df"))) {
+        if (length(dim(dtaFrm)) == 2) {
+            dtaFrm <- as.data.frame(dtaFrm)
         } else {
-            stop(sprintf("File extension not implemented: %s", fleNme))
+            if (dtaNme %in% c("iris3")) return(invisible(NULL))
+            stop(sprintf("Data set %s (package: %s) is of class (%s) but has not two dimensions.", dtaNme, basename(pkgLoc), class(dtaFrm)[1]))
         }
-    } else if (length(fleNme) == 0 && file.exists(file.path(pkgDir, "R", "sysdata.rda"))) {
-        dtaFrm <- getRda(file.path(pkgDir, "R", "sysdata.rda"), dtaNme)
-    } else {
-        warning(sprintf("Data set %s was not found!", dtaNme))
+    # character
+    } else if (any(class(dtaFrm) %in% c("character"))) {
+        dtaFrm <- xfmSep(dtaFrm)
+        if (!is.null(dtaFrm)) {
+            cat(str(dtaFrm))
+        } else {
+            stop(sprintf("Data set %s (package: %s) is of class (%s) but not yet defined", dtaNme, basename(pkgLoc), class(dtaFrm)[1]))
+            # if (dtaNme %in% c("raw_data_research_funding_rates", "country_colors", "continent_colors", "openintro_colors")) return(invisible(NULL))
+        }
+    # dist
+    } else if (any(class(dtaFrm) %in% c("dist"))) {
+        dtaFrm <- addAtt(as.data.frame(as.matrix(dtaFrm)), "origclass", "dist")
+    # integer, numeric
+    } else if (any(class(dtaFrm) %in% c("integer", "numeric"))) {
+        if (is.atomic(dtaFrm)) {
+            return(invisible(NULL))
+        } else {
+            cat(str(dtaFrm))
+            stop("Numeric but not yet defined")
+        }
+    # list, rollcall
+    } else if (any(class(dtaFrm) %in% c("list", "rollcall"))) {
+        if (dtaNme %in% c("pew_energy_2018")) {
+            stop("Find a better way to describe pew_energy_2018")
+            dtaFrm <- as.data.frame(as.matrix(dtaFrm))
+        } else if (any(unlist(lapply(dtaFrm, is.character)))) {
+            return(invisible(NULL))
+        } else if (dtaNme %in% c("DAAGxdb", "two65", "zzDAAGxdb", "brca", "mnist_127", "mnist_27", "tissue_gene_expression", "Khan", "NCI60",
+                                 "children_gender_stereo", "fish_oil_18", "nj07", "openintro_palettes", "simulated_dist", "simulated_normal",
+                                 "partycodes", "s109", "sc9497", "state.info", "Peirce", "mm_randhie")) {
+            return(invisible(NULL))
+        } else {
+            cat(str(dtaFrm))
+            stop("List but not yet defined")
+        }
+            print(str(dtaFrm))
+            stop(sprintf("Data set %s (package: %s) is of class (%s) but not yet defined", dtaNme, basename(pkgLoc), class(dtaFrm)[1]))
+
+    # mts
+    } else if (any(class(dtaFrm) %in% c("mts"))) {
+        dtaFrm <- addAtt(cbind(getTme(dtaFrm), as.data.frame(dtaFrm)), "origclass", "mts")
+    # table
+    } else if (any(class(dtaFrm) %in% c("table"))) {
+        if (dtaNme %in% c("crimtab", "orallesions", "pistonrings", "suicides", "Butterfly", "Federalist", "HorseKicks", "Hospital",
+                          "Rochdale", "Saxony", "WeldonDice", "WomenQueue", "Depends", "Heckman", "HospVisits")) {
+            print(str(dtaFrm))
+            return(invisible(NULL))
+        } else if (dtaNme %in% c("HairEyeColor", "occupationalStatus", "Titanic", "UCBAdmissions", "incidents.byCountryYr", "rearrests",
+                                 "Bundestag2005", "CoalMiners", "Employment", "PreSex", "RepVict", "SexualFun", "UKSoccer", "Abortion",
+                                 "Bartlett", "Caesar", "Cancer", "Detergent", "Draft1970table", "Dyke", "Gilby", "Heart", "HouseTasks",
+                                 "Hoyt", "JobSat", "Mobility")) {
+            print(str(dtaFrm))
+            dtaFrm <- addAtt(as.data.frame(dtaFrm), "origclass", "table")
+            print(str(dtaFrm))
+        } else {
+            cat(str(dtaFrm))
+            stop("Table but not yet defined")
+        }
+    # ts, zoo
+    } else if (any(class(dtaFrm) %in% c("ts", "zoo"))) {
         return(invisible(NULL))
+    } else {
+        cat(str(dtaFrm))
+        stop(sprintf("Unrecognized class (%s) for data set %s (package location: %s)", class(dtaFrm)[1], dtaNme, pkgLoc))
     }
-    if (any(class(dtaFrm) %in% c("matrix", "tbl_df")) && length(dim(dtaFrm)) == 2) dtaFrm <- as.data.frame(dtaFrm)
-    if (any(class(dtaFrm) %in% c("character", "dist", "list", "mts", "numeric", "ts", "zoo"))) return(invisible(NULL))
-    
-    dtaFrm
+
+    attr(dtaFrm, "examples") <- tools:::.Rd_get_metadata(pkgRd[[names(dtaNme)]], "examples")
+    return(dtaFrm)
 }
 
-getR <- function(fleNme = "") {
-    tmpEnv <- new.env()
-    sys.source(file.path(pkgDir, "data", "flower.R"), e = tmpEnv)
-    if (length(ls(envir = tmpEnv)) == 1) {
-        return(get(ls(envir = tmpEnv), envir = tmpEnv))
-    } else {
-        return(invisible(NULL))
-    }
-}
+#getR <- function(fleNme = "") {
+#    tmpEnv <- new.env()
+#    sys.source(fleNme, e = tmpEnv)
+#    if (length(ls(envir = tmpEnv)) == 1) {
+#        return(get(ls(envir = tmpEnv), envir = tmpEnv))
+#    } else {
+#        return(invisible(NULL))
+#    }
+#}
 
-getRda <- function(fleNme = "", dtaNme = "") {
-    tmpEnv <- new.env()
-    load(file = fleNme, envir = tmpEnv)
+#getRda <- function(fleNme = "", dtaNme = "") {
+#    tmpEnv <- new.env()
+#    load(file = fleNme, envir = tmpEnv)
 
-    if (nzchar(dtaNme)) {
-        return(get(dtaNme, envir = tmpEnv))
-    } else if (length(ls(envir = tmpEnv)) == 1) {
-        return(get(ls(envir = tmpEnv), envir = tmpEnv))
-    } else {
-        return(invisible(NULL))
-    }
-}
+#    if (nzchar(dtaNme)) {
+#        return(get(dtaNme, envir = tmpEnv))
+#    } else if (length(ls(envir = tmpEnv)) == 1) {
+#        return(get(ls(envir = tmpEnv), envir = tmpEnv))
+#    } else {
+#        return(invisible(NULL))
+#    }
+#}
 
 getRd  <- function(pkgNme = c()) {
+    # try to download packages from CRAN
     pkgURL <- paste0("https://cran.r-project.org/package=", pkgNme)
-    if (!is.null(suppressWarnings(try({ tmpURL <- url(pkgURL); open.connection(tmpURL, open = "r", timeout = 5); close(tmpURL); }, silent=T)[1]))) {
+    if (is.null(suppressWarnings(try({ tmpURL <- url(pkgURL); open.connection(tmpURL, open = "r", timeout = 15); close(tmpURL); }, silent=T)[1]))) {
+        pkgHTM <- readLines(pkgURL)
+        pkgTAR <- gsub(".*<a href=\"(.*?)\">.*$", "\\1", pkgHTM[grepl(".tar.gz", pkgHTM)])
+        pkgDst <- file.path(tempdir(), paste0(pkgNme, ".tar.gz"))
+        download.file(paste0("https://cran.r-project.org/package=", pkgNme, "/", pkgTAR), destfile = pkgDst, quiet = TRUE)
+        if (any(grepl("data/$", untar(pkgDst, list = TRUE)))) {
+            untar(pkgDst, exdir = dirname(pkgDst))
+            unlink(pkgDst)
+            pkgDir <- gsub(".tar.gz", "", pkgDst)
+            pkgRd  <- clnRd(tools::Rd_db(dir = pkgDir))
+            if (length(pkgRd) > 0) {
+                attr(pkgRd, "pkgLoc") <- pkgDir
+                attr(pkgRd, "pkgLic") <- fmtLic(pkgNme, pkgURL, readLines(file.path(pkgDir, "DESCRIPTION")))
+                return(pkgRd)
+            } else {
+                stop(sprintf("Could not process Rd for %s", pkgNme))
+                return(invisible(NULL))
+            }    
+        } else {
+            unlink(pkgDst)
+            return(invisible(NULL))
+        }
+    # packages in base R are not on CRAN, use the installed version instead
+    } else if (pkgNme %in% .packages(all.available = TRUE)) {
+        pkgRd <- clnRd(tools::Rd_db(package = pkgNme))
+        if (length(pkgRd) > 0) {
+            attr(pkgRd, "pkgLoc") <- pkgNme
+            attr(pkgRd, "pkgLic") <- fmtLic(pkgNme, "", "License: GPL-2 | GPL-3")
+            return(pkgRd)
+        } else {
+            stop(sprintf("Could not process Rd for %s", pkgNme))
+            return(invisible(NULL))
+        }    
+    # throw an error for now
+    } else {
+        warning(sprintf("Package %s not found.", pkgNme))
         return(invisible(NULL))
     }
-    pkgHTM <- readLines(pkgURL)
-    pkgTAR <- gsub(".*<a href=\"(.*?)\">.*$", "\\1", pkgHTM[grepl(".tar.gz", pkgHTM)])
-    pkgDst <- file.path(tempdir(), paste0(pkgNme, ".tar.gz"))
-    download.file(paste0("https://cran.r-project.org/package=", pkgNme, "/", pkgTAR), destfile = pkgDst, quiet = TRUE)
-    if (any(grepl("data/$", untar(pkgDst, list = TRUE)))) {
-        untar(pkgDst, exdir = dirname(pkgDst))
-        unlink(pkgDst)
-        pkgDir <- gsub(".tar.gz", "", pkgDst)
-        pkgRd  <- clnRd(tools::Rd_db(dir = pkgDir))
-        pkgDsc <- readLines(file.path(pkgDir, "DESCRIPTION"))
-        # attach whatever is needed to pkgRd 
-        attr(pkgRd, "pkgDir") <- pkgDir
-        attr(pkgRd, "pkgLic") <- sprintf(paste("This data set is included in the R-package %s (available at %s). It was originally published in the",
-                                               "references shown above. The R-package (including this data set) uses the following license(s): %s."),
-                                               pkgNme, pkgURL, gsub("\\|", "or", gsub("^License: ", "", pkgDsc[grepl("^License:", pkgDsc)])))
-        return(pkgRd)
+}
+
+getTme <- function(dtaFrm = NULL) {
+    if        (attr(dtaFrm, "tsp")[3] == 1) {
+        data.frame(period = as.integer(time(dtaFrm)))
+    } else if (attr(dtaFrm, "tsp")[3] == 4) {
+        data.frame(year = as.integer(time(dtaFrm)), quarter = as.integer(round(time(dtaFrm) %% 1 * 4 + 1)))
+    } else if (attr(dtaFrm, "tsp")[3] == 12) {
+        data.frame(year = as.integer(time(dtaFrm)),   month = as.integer(round(time(dtaFrm) %% 1 * 12 + 1)))
+    } else if (attr(dtaFrm, "tsp")[3] %in% c(13, 52)) {
+        data.frame(year = as.integer(time(dtaFrm)),    week = as.integer(round(time(dtaFrm) %% 1 * 52 + 1)))
+    } else if (attr(dtaFrm, "tsp")[3] == 365) {
+        as.data.frame(as.matrix(dtaFrm))[c(1, 2, 3)]
     } else {
-        unlink(pkgDst)
-        return(invisible(NULL))
+        stop()
     }
 }
 
 prcDta <- function(pkgRd = NULL, allDta = c()) {
-    for (j in seq_along(pkgRd)) {
-        dtaNme <- gsub("\\.Rd", "", names(pkgRd[j]))
-        dtaOut <- file.path("data", paste0(dtaNme, ".omv"))
-        # check whether there is already a data set with the same name
-        if (file.exists(dtaOut)) stop(sprintf("File %s already exists (%d in %s).", dtaOut, j, pkgNme))
-        dtaFrm <- getDta(pkgDir, dtaNme)
-        # check whether the data set should be excluded
-        if (is.null(dtaFrm)) next
-        dtaTtl <- tools:::.Rd_get_metadata(pkgRd[[j]], "title")
-        dtaDsc <- rmvWSs(tools:::.Rd_get_metadata(pkgRd[[j]], "description"))
-        dtaVar <- fmtVar(tools:::.Rd_get_metadata(pkgRd[[j]], "format"))
-        dtaRef <- fmtRef(tools:::.Rd_get_metadata(pkgRd[[j]], "references"))
-        dtaMth <- detMth(tools:::.Rd_get_metadata(pkgRd[[j]], "examples"))
-        if (all(names(dtaVar) == names(dtaFrm))) {
-            stop(sprintf("Mismatch between data set and variable description for %s (%d in %s).", dtaNme, j, pkgNme))
+    for (i in seq_along(pkgRd)) {
+        dtaNme <- setNames(unique(unlist(pkgRd[[i]][sapply(pkgRd[[i]], attr, "Rd_tag") %in% c("\\name", "\\alias")])), names(pkgRd[i]))
+        for (j in seq_along(dtaNme)) {
+            dtaOut <- file.path("data", paste0(dtaNme[j], ".omv"))
+            # check whether there is already a data set with the same name
+            if (file.exists(dtaOut)) stop(sprintf("File %s already exists (%d in %s).", dtaOut, j, pkgNme))
+            dtaFrm <- getDta(attr(pkgRd, "pkgLoc"), dtaNme[j])
+            # check whether the data set should be excluded
+            if (is.null(dtaFrm)) next
+            dtaTtl <- tools:::.Rd_get_metadata(pkgRd[[i]], "title")
+            dtaDsc <- rmvWSs(tools:::.Rd_get_metadata(pkgRd[[i]], "description"))
+            dtaVar <- fmtVar(tools:::.Rd_get_metadata(pkgRd[[i]], "format"))
+            dtaRef <- fmtRef(tools:::.Rd_get_metadata(pkgRd[[i]], "references"))
+            dtaMth <- detMth(tools:::.Rd_get_metadata(pkgRd[[i]], "examples"))
+            if (!all(names(dtaFrm) %in% names(dtaVar))) {
+                stop(sprintf("Mismatch between data set and variable description for %s (%d in %s).", dtaNme[j], i, pkgNme))
+            }
+            # write data set
+            jmvReadWrite::describe_omv(dtaInp = dtaFrm, fleOut = dtaOut, dtaTtl = paste0(dtaNme[j], ": ", dtaTtl),
+                                       dtaDsc = list(description = dtaDsc, variables = dtaVar[names(dtaVar) %in% names(dtaFrm)],
+                                                     references = dtaRef, license = attr(pkgRd, "pkgLic")))
+            # return entry for the data set to 0000.yaml
+            c(allDta, paste0("  - name: ", dtaNme, "\n    path: ", dtaNme, ".omv\n    description: ",
+                        ifelse(any(nchar(dtaDsc) < c(80, nchar(dtaTtl))), dtaDsc, dtaTtl),
+                        ifelse(length(dtaMth) > 0, paste0(c("    tags:", paste0("     - ", dtaMth)), collapse = "\n"), "")))
         }
-        # write data set
-        jmvReadWrite::describe_omv(dtaInp = dtaFrm, fleOut = dtaOut, dtaTtl = paste0(dtaNme, ": ", dtaTtl),
-                                   dtaDsc = list(description = dtaDsc, variables = dtaVar, references = dtaRef, license = dtaLic))
-        # return entry for the data set to 0000.yaml
-        c(allDta, paste0("  - name: ", dtaNme, "\n    path: ", dtaNme, ".omv\n    description: ",
-                    ifelse(any(nchar(dtaDsc) < c(80, nchar(dtaTtl))), dtaDsc, dtaTtl),
-                    ifelse(length(dtaMth) > 0, paste0(c("    tags:", paste0("     - ", dtaMth)), collapse = "\n"), "")))
     }
 }
 
 rmvWSs <- function(inpStr = "") {
     gsub("list\\(\"(\\w+)\"\\)", "“\\1”", gsub("\\s+", " ", inpStr))
+}
+
+xfmSep <- function(inpChr = NULL) {
+    for (S in c("\t", ";", ",")) {
+        numSep <- lengths(regmatches(inpChr, gregexpr(S, inpChr)))
+        if (length(setdiff(unique(numSep), 0)) == 1) {
+            hdrLne <- strsplit(inpChr[numSep > 0][+1], S)[[1]]
+            if (all(is.na(suppressWarnings(as.numeric(hdrLne))))) {
+                crrDF <- setNames(data.frame(do.call(rbind, strsplit(inpChr[numSep > 0][-1], S, fixed = TRUE))), hdrLne)
+            } else {
+                crrDF <-          data.frame(do.call(rbind, strsplit(inpChr[numSep > 0],     S, fixed = TRUE)))
+            }
+            numClm <- unlist(lapply(crrDF, function(x) !any(is.na(suppressWarnings(as.numeric(x))))))
+            crrDF[numClm]  <- lapply(crrDF[numClm],  as.numeric)
+            crrDF[!numClm] <- lapply(crrDF[!numClm], as.factor)
+            return(crrDF)
+        }
+    }
+    return(invisble(NULL))
 }
 
 do_not_run <- function() {
@@ -266,6 +402,8 @@ if (!jmvReadWrite:::hasPkg("Rdpack")) install.packages("Rdpack", dependencies = 
 
 allPkg <- readLines("https://raw.githubusercontent.com/vincentarelbundock/Rdatasets/master/DESCRIPTION")
 allPkg <- trimws(gsub(",$", "", allPkg[seq(grep("^Imports:", allPkg) + 1, grep("^Suggests:", allPkg) - 1)]))
+allPkg <- sort(c(allPkg,                              readLines("addPkg")))
+allPkg <- sort(setdiff(allPkg, trimws(gsub("#.*", "", readLines("excPkg")))))
 
 allDta <- c()
 
@@ -274,28 +412,22 @@ dir.create("data")
 
 for (i in seq_along(allPkg)) {
     pkgNme <- allPkg[i]
-    # packages in base R are not on CRAN
-    if (pkgNme %in% c("datasets")) {
-        pkgRd <- clnRd(tools::Rd_db(package = pkgNme))
-        attr(pkgRd, "pkgDir") <- system.file(package = pkgNme)
-        attr(pkgRd, "pkgLic") <- sprintf(paste("This data set is included in the R-package %s (and part of base R). It was originally",
-                                               "published in the references shown above. The R-package (including this data set) uses",
-                                               "the following license(s): GPL (>= 2)."), pkgNme)
-    # download tar.gz from CRAN, extract it, and read the Rd-database
-    } else {
-        pkgRd <- getRd(pkgNme)
-    }
+    pkgRd  <- getRd(pkgNme)
     if (is.null(pkgRd)) next
     
     cat(sprintf("\n\n%s\n\n%s\n", paste(rep("=", 80), collapse = ""), pkgNme))
-    pkgDir <- attr(pkgRd, "pkgDir")
-    crrNme <- gsub("\\.Rd", "", names(pkgRd))
-    if (length(crrNme) > 0) print(table(sapply(crrNme, function(x) class(suppressWarnings(getDta(pkgDir, x)))[1])))
-    crrExm <- unname(unlist(sapply(sapply(pkgRd, tools:::.Rd_get_metadata, "examples"), detMth)))
-    if (length(crrExm) > 0) print(sort(table(crrExm), decreasing = TRUE))
+    crrNme <- unlist(sapply(names(pkgRd), function(x) unique(unlist(pkgRd[[x]][sapply(pkgRd[[x]], attr, "Rd_tag") %in% c("\\name", "\\alias")]))))
+    crrDta <- setNames(vector(mode = "list", length = length(crrNme)), crrNme)
+    for (j in seq_along(crrNme)) {
+        crrDta[[j]] <- suppressWarnings(getDta(attr(pkgRd, "pkgLoc"), crrNme[j]))
+    }
+    print(table(vapply(crrDta, class, character(1), USE.NAMES = FALSE)))
+#   print(sort(table(unlist(sapply(lapply(crrDta[!vapply(crrDta, is.null, logical(1))], attr, "examples"), detMth))), decreasing = TRUE))
+#   crrExm <- unname(unlist(sapply(sapply(pkgRd, tools:::.Rd_get_metadata, "examples"), detMth)))
+#   if (length(crrExm) > 0) print(sort(table(crrExm), decreasing = TRUE))
 
 # perhaps: exclude data sets
-    if (!is.null(attr(pkgRd, "pkgDir")) && grepl(tempdir(), attr(pkgRd, "pkgDir"))) unlink(attr(pkgRd, "pkgDir"), recursive = TRUE)
+    if (!is.null(attr(pkgRd, "pkgLoc")) && grepl(tempdir(), attr(pkgRd, "pkgLoc"))) unlink(attr(pkgRd, "pkgLoc"), recursive = TRUE)
 }
 
 }
